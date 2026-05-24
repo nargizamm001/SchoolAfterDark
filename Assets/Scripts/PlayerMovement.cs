@@ -6,28 +6,47 @@ public class PlayerMovement : MonoBehaviour
     public float walkSpeed = 4f;
     public float runSpeed = 7f;
     public float jumpHeight = 1.5f;
-    public float gravity = -20f;
+    public float gravity = -9.81f;
 
     [Header("Mouse Look")]
-    public Transform playerCamera;
     public float mouseSensitivity = 2f;
+
+    [Header("Camera References")]
+    public Camera firstPersonCamera;
+    public Camera thirdPersonCamera;
+    public Transform thirdPersonCameraPivot;
+
+    [Header("Third Person Camera")]
+    public float thirdPersonDistance = 4f;
+    public float cameraCollisionRadius = 0.25f;
+    public LayerMask cameraCollisionLayers = ~0;
+
+    [Header("Animation")]
+    public Animator animator;
+
+    [Header("Player Model")]
+    public GameObject playerModel;
 
     private CharacterController controller;
     private Vector3 velocity;
     private float cameraPitch;
+    private bool isThirdPerson = false;
 
     void Start()
     {
         controller = GetComponent<CharacterController>();
 
-        if (playerCamera == null)
+        if (animator == null)
         {
-            Camera cam = GetComponentInChildren<Camera>();
-            if (cam != null)
-            {
-                playerCamera = cam.transform;
-            }
+            animator = GetComponentInChildren<Animator>();
         }
+
+        if (playerModel == null && animator != null)
+        {
+            playerModel = animator.gameObject;
+        }
+
+        SetCameraMode(false);
 
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
@@ -35,8 +54,45 @@ public class PlayerMovement : MonoBehaviour
 
     void Update()
     {
+        if (Input.GetKeyDown(KeyCode.V))
+        {
+            SetCameraMode(!isThirdPerson);
+        }
+
         RotateView();
-        Move();
+        MovePlayer();
+        UpdateThirdPersonCameraCollision();
+    }
+
+    void SetCameraMode(bool thirdPerson)
+    {
+        isThirdPerson = thirdPerson;
+
+        if (firstPersonCamera != null)
+        {
+            firstPersonCamera.gameObject.SetActive(true);
+            firstPersonCamera.enabled = !isThirdPerson;
+        }
+
+        if (thirdPersonCamera != null)
+        {
+            thirdPersonCamera.gameObject.SetActive(true);
+            thirdPersonCamera.enabled = isThirdPerson;
+        }
+
+        SetPlayerModelVisible(isThirdPerson);
+    }
+
+    void SetPlayerModelVisible(bool visible)
+    {
+        if (playerModel == null) return;
+
+        Renderer[] renderers = playerModel.GetComponentsInChildren<Renderer>();
+
+        foreach (Renderer renderer in renderers)
+        {
+            renderer.enabled = visible;
+        }
     }
 
     void RotateView()
@@ -49,19 +105,22 @@ public class PlayerMovement : MonoBehaviour
         cameraPitch -= mouseY;
         cameraPitch = Mathf.Clamp(cameraPitch, -80f, 80f);
 
-        if (playerCamera != null)
+        if (!isThirdPerson && firstPersonCamera != null)
         {
-            playerCamera.localRotation = Quaternion.Euler(cameraPitch, 0f, 0f);
+            firstPersonCamera.transform.localRotation = Quaternion.Euler(cameraPitch, 0f, 0f);
+        }
+
+        if (isThirdPerson && thirdPersonCameraPivot != null)
+        {
+            thirdPersonCameraPivot.localRotation = Quaternion.Euler(cameraPitch, 0f, 0f);
         }
     }
 
-    void Move()
+    void MovePlayer()
     {
-        if (controller == null) return;
+        bool isGrounded = controller.isGrounded;
 
-        bool grounded = controller.isGrounded;
-
-        if (grounded && velocity.y < 0f)
+        if (isGrounded && velocity.y < 0f)
         {
             velocity.y = -2f;
         }
@@ -69,23 +128,76 @@ public class PlayerMovement : MonoBehaviour
         float x = 0f;
         float z = 0f;
 
+        
         if (Input.GetKey(KeyCode.A)) x = 1f;
         if (Input.GetKey(KeyCode.D)) x = -1f;
+
+        
         if (Input.GetKey(KeyCode.W)) z = -1f;
         if (Input.GetKey(KeyCode.S)) z = 1f;
 
         Vector3 move = transform.right * x + transform.forward * z;
         move = Vector3.ClampMagnitude(move, 1f);
 
-        float speed = Input.GetKey(KeyCode.LeftShift) ? runSpeed : walkSpeed;
-        controller.Move(move * speed * Time.deltaTime);
+        bool isRunning = Input.GetKey(KeyCode.LeftShift);
+        float currentSpeed = isRunning ? runSpeed : walkSpeed;
 
-        if (Input.GetKeyDown(KeyCode.Space) && grounded)
+        controller.Move(move * currentSpeed * Time.deltaTime);
+
+        if (Input.GetKeyDown(KeyCode.Space) && isGrounded)
         {
             velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
+
+            if (animator != null)
+            {
+                animator.SetTrigger("Jump");
+            }
         }
 
         velocity.y += gravity * Time.deltaTime;
         controller.Move(velocity * Time.deltaTime);
+
+        if (animator != null)
+        {
+            float animationSpeed = move.magnitude;
+
+            if (isRunning && animationSpeed > 0.1f)
+            {
+                animationSpeed = 2f;
+            }
+
+            animator.SetFloat("Speed", animationSpeed);
+            animator.SetBool("IsGrounded", isGrounded);
+        }
+    }
+
+    void UpdateThirdPersonCameraCollision()
+    {
+        if (!isThirdPerson || thirdPersonCamera == null || thirdPersonCameraPivot == null)
+        {
+            return;
+        }
+
+        Vector3 pivotPosition = thirdPersonCameraPivot.position;
+        Vector3 desiredCameraPosition = thirdPersonCameraPivot.TransformPoint(new Vector3(0f, 0.5f, -thirdPersonDistance));
+        Vector3 direction = desiredCameraPosition - pivotPosition;
+
+        float distance = thirdPersonDistance;
+
+        if (Physics.SphereCast(
+            pivotPosition,
+            cameraCollisionRadius,
+            direction.normalized,
+            out RaycastHit hit,
+            thirdPersonDistance,
+            cameraCollisionLayers,
+            QueryTriggerInteraction.Ignore))
+        {
+            distance = hit.distance - 0.2f;
+            distance = Mathf.Clamp(distance, 0.7f, thirdPersonDistance);
+        }
+
+        thirdPersonCamera.transform.localPosition = new Vector3(0f, 0.5f, -distance);
+        thirdPersonCamera.transform.localRotation = Quaternion.identity;
     }
 }
