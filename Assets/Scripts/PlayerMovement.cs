@@ -128,11 +128,10 @@ public class PlayerMovement : MonoBehaviour
         float x = 0f;
         float z = 0f;
 
-        
+        // У тебя было отзеркалено управление, поэтому оставляю так:
         if (Input.GetKey(KeyCode.A)) x = 1f;
         if (Input.GetKey(KeyCode.D)) x = -1f;
 
-        
         if (Input.GetKey(KeyCode.W)) z = -1f;
         if (Input.GetKey(KeyCode.S)) z = 1f;
 
@@ -172,32 +171,56 @@ public class PlayerMovement : MonoBehaviour
     }
 
     void UpdateThirdPersonCameraCollision()
+{
+    if (!isThirdPerson || thirdPersonCamera == null || thirdPersonCameraPivot == null)
     {
-        if (!isThirdPerson || thirdPersonCamera == null || thirdPersonCameraPivot == null)
-        {
-            return;
-        }
-
-        Vector3 pivotPosition = thirdPersonCameraPivot.position;
-        Vector3 desiredCameraPosition = thirdPersonCameraPivot.TransformPoint(new Vector3(0f, 0.5f, -thirdPersonDistance));
-        Vector3 direction = desiredCameraPosition - pivotPosition;
-
-        float distance = thirdPersonDistance;
-
-        if (Physics.SphereCast(
-            pivotPosition,
-            cameraCollisionRadius,
-            direction.normalized,
-            out RaycastHit hit,
-            thirdPersonDistance,
-            cameraCollisionLayers,
-            QueryTriggerInteraction.Ignore))
-        {
-            distance = hit.distance - 0.2f;
-            distance = Mathf.Clamp(distance, 0.7f, thirdPersonDistance);
-        }
-
-        thirdPersonCamera.transform.localPosition = new Vector3(0f, 0.5f, -distance);
-        thirdPersonCamera.transform.localRotation = Quaternion.identity;
+        return;
     }
+
+    Vector3 pivotPosition = thirdPersonCameraPivot.position + Vector3.up * 0.2f;
+
+    Vector3 desiredDirection = -thirdPersonCameraPivot.forward;
+    Vector3 desiredCameraPosition = pivotPosition + desiredDirection * thirdPersonDistance + Vector3.up * 0.3f;
+
+    Vector3 direction = desiredCameraPosition - pivotPosition;
+    float maxDistance = direction.magnitude;
+
+    float finalDistance = maxDistance;
+
+    RaycastHit[] hits = Physics.SphereCastAll(
+        pivotPosition,
+        cameraCollisionRadius,
+        direction.normalized,
+        maxDistance,
+        cameraCollisionLayers,
+        QueryTriggerInteraction.Ignore
+    );
+
+    foreach (RaycastHit hit in hits)
+    {
+        if (hit.collider == null)
+            continue;
+
+        if (hit.collider.transform == transform)
+            continue;
+
+        if (hit.collider.transform.IsChildOf(transform))
+            continue;
+
+        if (hit.distance < finalDistance)
+        {
+            finalDistance = hit.distance;
+        }
+    }
+
+    float wallBuffer = 0.7f;
+    float minDistance = 0.8f;
+
+    finalDistance = Mathf.Clamp(finalDistance - wallBuffer, minDistance, maxDistance);
+
+    Vector3 finalPosition = pivotPosition + direction.normalized * finalDistance;
+
+    thirdPersonCamera.transform.position = finalPosition;
+    thirdPersonCamera.transform.LookAt(thirdPersonCameraPivot.position + Vector3.up * 0.7f);
+}
 }

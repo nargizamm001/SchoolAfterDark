@@ -1,3 +1,4 @@
+using System.Collections;
 using TMPro;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -14,9 +15,13 @@ public class GameManager : MonoBehaviour
     public TextMeshProUGUI livesText;
     public TextMeshProUGUI keyText;
     public GameObject gameOverPanel;
+    public GameObject youWinText;
 
     [Header("Scene Names")]
     public string nextLevelName = "Level2";
+
+    [Header("Win Settings")]
+    public float winDelay = 2f;
 
     [Header("Respawn")]
     public Transform player;
@@ -25,6 +30,7 @@ public class GameManager : MonoBehaviour
     public Transform ghostSpawnPoint;
 
     private CharacterController playerController;
+    private bool levelFinished = false;
 
     void Awake()
     {
@@ -34,6 +40,7 @@ public class GameManager : MonoBehaviour
     void Start()
     {
         hasKey = false;
+        levelFinished = false;
 
         if (player != null)
         {
@@ -43,6 +50,11 @@ public class GameManager : MonoBehaviour
         if (gameOverPanel != null)
         {
             gameOverPanel.SetActive(false);
+        }
+
+        if (youWinText != null)
+        {
+            youWinText.SetActive(false);
         }
 
         Time.timeScale = 1f;
@@ -56,20 +68,10 @@ public class GameManager : MonoBehaviour
         Debug.Log("Key picked up!");
     }
 
-    public void TryOpenDoor()
-    {
-        if (hasKey)
-        {
-            SceneManager.LoadScene(nextLevelName);
-        }
-        else
-        {
-            Debug.Log("Door is locked. Find the key first.");
-        }
-    }
-
     public void PlayerCaught()
     {
+        if (levelFinished) return;
+
         lives--;
         UpdateUI();
 
@@ -110,6 +112,7 @@ public class GameManager : MonoBehaviour
 
     void GameOver()
     {
+        levelFinished = true;
         Time.timeScale = 0f;
 
         if (gameOverPanel != null)
@@ -119,6 +122,26 @@ public class GameManager : MonoBehaviour
 
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
+    }
+
+    public void WinLevel()
+    {
+        if (levelFinished) return;
+
+        levelFinished = true;
+        StartCoroutine(WinRoutine());
+    }
+
+    IEnumerator WinRoutine()
+    {
+        if (youWinText != null)
+        {
+            youWinText.SetActive(true);
+        }
+
+        yield return new WaitForSeconds(winDelay);
+
+        SceneManager.LoadScene(nextLevelName);
     }
 
     void UpdateUI()
