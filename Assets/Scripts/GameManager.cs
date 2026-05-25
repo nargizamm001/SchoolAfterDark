@@ -7,6 +7,9 @@ public class GameManager : MonoBehaviour
 {
     public static GameManager instance;
 
+    private static int savedLives = 3;
+    private static bool shouldUseSavedLives = false;
+
     [Header("Player State")]
     public int lives = 3;
     public bool hasKey = false;
@@ -19,17 +22,20 @@ public class GameManager : MonoBehaviour
 
     [Header("Scene Names")]
     public string nextLevelName = "Level2";
+    public string mainMenuSceneName = "MainMenu";
 
     [Header("Win Settings")]
     public float winDelay = 2f;
 
-    [Header("Respawn")]
+    [Header("Player References")]
     public Transform player;
     public Transform playerSpawnPoint;
+    public PlayerMovement playerMovement;
+
+    [Header("Ghost References")]
     public Transform ghost;
     public Transform ghostSpawnPoint;
 
-    private CharacterController playerController;
     private bool levelFinished = false;
 
     void Awake()
@@ -39,12 +45,22 @@ public class GameManager : MonoBehaviour
 
     void Start()
     {
+        if (shouldUseSavedLives)
+        {
+            lives = savedLives;
+        }
+        else
+        {
+            lives = 3;
+            savedLives = 3;
+        }
+
         hasKey = false;
         levelFinished = false;
 
-        if (player != null)
+        if (playerMovement == null)
         {
-            playerController = player.GetComponent<CharacterController>();
+            playerMovement = FindObjectOfType<PlayerMovement>();
         }
 
         if (gameOverPanel != null)
@@ -58,6 +74,10 @@ public class GameManager : MonoBehaviour
         }
 
         Time.timeScale = 1f;
+
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
+
         UpdateUI();
     }
 
@@ -65,14 +85,20 @@ public class GameManager : MonoBehaviour
     {
         hasKey = true;
         UpdateUI();
+
         Debug.Log("Key picked up!");
     }
 
     public void PlayerCaught()
     {
-        if (levelFinished) return;
+        if (levelFinished)
+        {
+            return;
+        }
 
         lives--;
+        savedLives = lives;
+
         UpdateUI();
 
         if (lives <= 0)
@@ -81,44 +107,42 @@ public class GameManager : MonoBehaviour
         }
         else
         {
-            RespawnRound();
+            RestartRoundWithRemainingLives();
         }
     }
 
-    void RespawnRound()
+    void RestartRoundWithRemainingLives()
     {
-        if (player != null && playerSpawnPoint != null)
-        {
-            if (playerController != null)
-            {
-                playerController.enabled = false;
-            }
+        shouldUseSavedLives = true;
 
-            player.position = playerSpawnPoint.position;
-            player.rotation = playerSpawnPoint.rotation;
+        Time.timeScale = 1f;
 
-            if (playerController != null)
-            {
-                playerController.enabled = true;
-            }
-        }
-
-        if (ghost != null && ghostSpawnPoint != null)
-        {
-            ghost.position = ghostSpawnPoint.position;
-            ghost.rotation = ghostSpawnPoint.rotation;
-        }
+        Scene currentScene = SceneManager.GetActiveScene();
+        SceneManager.LoadScene(currentScene.name);
     }
 
     void GameOver()
     {
         levelFinished = true;
-        Time.timeScale = 0f;
+        shouldUseSavedLives = false;
+        savedLives = 3;
+
+        if (ScoreManager.instance != null)
+        {
+            ScoreManager.instance.SaveHighScore();
+        }
+
+        if (playerMovement != null)
+        {
+            playerMovement.enabled = false;
+        }
 
         if (gameOverPanel != null)
         {
             gameOverPanel.SetActive(true);
         }
+
+        Time.timeScale = 0f;
 
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
@@ -126,9 +150,18 @@ public class GameManager : MonoBehaviour
 
     public void WinLevel()
     {
-        if (levelFinished) return;
+        if (levelFinished)
+        {
+            return;
+        }
 
         levelFinished = true;
+
+        if (ScoreManager.instance != null)
+        {
+            ScoreManager.instance.SaveHighScore();
+        }
+
         StartCoroutine(WinRoutine());
     }
 
@@ -141,7 +174,35 @@ public class GameManager : MonoBehaviour
 
         yield return new WaitForSeconds(winDelay);
 
+        shouldUseSavedLives = false;
+        savedLives = 3;
+
+        Time.timeScale = 1f;
         SceneManager.LoadScene(nextLevelName);
+    }
+
+    public void RestartGame()
+    {
+        shouldUseSavedLives = false;
+        savedLives = 3;
+
+        Time.timeScale = 1f;
+
+        Scene currentScene = SceneManager.GetActiveScene();
+        SceneManager.LoadScene(currentScene.name);
+    }
+
+    public void QuitToMainMenu()
+    {
+        shouldUseSavedLives = false;
+        savedLives = 3;
+
+        Time.timeScale = 1f;
+
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+
+        SceneManager.LoadScene(mainMenuSceneName);
     }
 
     void UpdateUI()

@@ -4,10 +4,25 @@ public class KeyPickup : MonoBehaviour
 {
     void OnTriggerEnter(Collider other)
     {
-        if (other.CompareTag("Player"))
+        bool isPlayer =
+            other.CompareTag("Player") ||
+            other.transform.root.CompareTag("Player");
+
+        if (!isPlayer)
+        {
+            return;
+        }
+
+        if (GameManager.instance != null)
         {
             GameManager.instance.PickUpKey();
-            Destroy(gameObject);
         }
+
+        if (ScoreManager.instance != null)
+        {
+            ScoreManager.instance.AddKeyBonus();
+        }
+
+        Destroy(gameObject);
     }
 }
